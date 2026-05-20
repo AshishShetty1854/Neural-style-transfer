@@ -1,0 +1,33 @@
+# Virtual Environment
+venv/
+env/
+.venv/
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# Datasets
+datasets/
+content_coco_big_dataset/
+style_big_dataset/
+
+
+# Outputs
+outputs/
+results/
+generated/
+static/generated/
+
+
+# IDE Files
+.vscode/
+.idea/
+
+# Notebook Checkpoints
+.ipynb_checkpoints/
+
+# System Files
+.DS_Store
+Thumbs.db
+
