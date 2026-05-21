@@ -17,7 +17,7 @@ from utils.utils import adaptive_instance_normalization, calc_mean_std
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'supersecretkey'
-app.config['UPLOAD_FOLDER'] = 'static/uploads'
+app.config['UPLOAD_FOLDER'] = '/tmp/uploads'          # ✅ FIX 1: Use /tmp (persistent on Render)
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg'}
 Bootstrap(app)
 
@@ -33,11 +33,10 @@ class UploadForm(FlaskForm):
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+# ✅ FIX 2: Use relative paths + map_location (no hardcoded Windows path)
 encoder = VGGEncoder('vgg_normalised.pth').to(device)
 decoder = Decoder().to(device)
-decoder.load_state_dict(
-    torch.load("experiment/final_exp/decoder_final.pth", map_location=device)
-)
+decoder.load_state_dict(torch.load("decoder_final.pth", map_location=device))
 encoder.eval()
 decoder.eval()
 
@@ -55,6 +54,7 @@ def style_transfer(content_image, style_image, encoder, decoder, alpha, device):
         transforms.Resize(256),
         transforms.ToTensor()
     ])
+
     content_image = content_transform(content_image).unsqueeze(0).to(device)
     style_image = style_transform(style_image).unsqueeze(0).to(device)
 
@@ -63,7 +63,6 @@ def style_transfer(content_image, style_image, encoder, decoder, alpha, device):
         style_feats = encoder(style_image, is_test=True)
 
         stylized_feats = adaptive_instance_normalization(content_feats, style_feats)
-
         stylized_feats = alpha * stylized_feats + (1 - alpha) * content_feats
 
         stylized_image = decoder(stylized_feats)
@@ -77,7 +76,6 @@ def save_image(image, path):
     image = image.clamp(0, 1)
     image = transforms.ToPILImage()(image)
     image.save(path)
-
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -107,11 +105,11 @@ def index():
         else:
             style_filename = form.style_path.data
 
-        # 3. If both exist, do the transfer. If not, trigger the error.
+        # 3. If both exist, do the transfer
         if content_filename and style_filename:
             content_path = os.path.join(app.config['UPLOAD_FOLDER'], content_filename)
             style_path = os.path.join(app.config['UPLOAD_FOLDER'], style_filename)
-            
+
             try:
                 content_image = Image.open(content_path).convert('RGB')
                 style_image = Image.open(style_path).convert('RGB')
@@ -122,12 +120,11 @@ def index():
                 result_filename = 'stylized_' + content_filename
                 result_path = os.path.join(app.config['UPLOAD_FOLDER'], result_filename)
                 save_image(stylized_image, result_path)
-                
+
                 result_image = result_filename
             except Exception as e:
                 error = str(e)
         else:
-            # Generate the specific error based on what is missing
             if not content_filename and not style_filename:
                 error = 'Please upload both content and style images.'
             elif not content_filename:
@@ -149,6 +146,7 @@ def send_example(filename):
     return send_from_directory('examples', filename)
 
 
+# ✅ FIX 3: Bind to 0.0.0.0 and use Render's $PORT env variable
 if __name__ == '__main__':
-    from werkzeug.serving import run_simple
-    run_simple('localhost', 5000, app, use_reloader=True, use_debugger=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
